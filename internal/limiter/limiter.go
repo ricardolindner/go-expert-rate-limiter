@@ -21,7 +21,7 @@ func (l *Limiter) Allow(key string, maxRequests int, blockTime time.Duration) (b
 		return false, 0, err
 	}
 
-	log.Printf("Chave: %s, Requisições atuais: %d, Limite: %d", key, currentRequests, maxRequests)
+	log.Printf("Key: %s, Current requests: %d, Limit: %d", key, currentRequests, maxRequests)
 
 	if currentRequests > maxRequests {
 		return false, blockTime, nil

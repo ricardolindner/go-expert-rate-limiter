@@ -25,9 +25,9 @@ func RateLimiterMiddleware(limiter *limiter.Limiter, cfg *config.Config) func(ne
 					key = "token:" + apiKey
 					maxRequests = tokenConfig.MaxRequests
 					blockTime = tokenConfig.BlockTime
-					log.Printf("Usando limite por token: %s", apiKey)
+					log.Printf("Using per token limit: %s", apiKey)
 				} else {
-					log.Printf("Token '%s' não configurado, usando limite por IP.", apiKey)
+					log.Printf("Token '%s' not configured, using per-IP limit.", apiKey)
 					key = "ip:" + getIP(r)
 					maxRequests = cfg.DefaultMaxRequests
 					blockTime = cfg.DefaultBlockTime
@@ -36,20 +36,20 @@ func RateLimiterMiddleware(limiter *limiter.Limiter, cfg *config.Config) func(ne
 				key = "ip:" + getIP(r)
 				maxRequests = cfg.DefaultMaxRequests
 				blockTime = cfg.DefaultBlockTime
-				log.Printf("Usando limite por IP: %s", getIP(r))
+				log.Printf("Using IP limit: %s", getIP(r))
 			}
 
 			allowed, expiry, err := limiter.Allow(key, maxRequests, blockTime)
 			if err != nil {
-				log.Printf("Erro no rate limiter para chave %s: %v", key, err)
-				http.Error(w, "Erro interno no servidor de rate limiter", http.StatusInternalServerError)
+				log.Printf("Error in rate limiter for key %s: %v", key, err)
+				http.Error(w, "Internal error in the rate limiter server", http.StatusInternalServerError)
 				return
 			}
 
 			if !allowed {
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", int(expiry.Seconds())))
-				http.Error(w, "Você atingiu o número máximos de requisições ou ações permitidas por uma janela de tempo", http.StatusTooManyRequests)
-				log.Printf("Requisição bloqueada para %s. Limite excedido.", key)
+				http.Error(w, "you have reached the maximum number of requests or actions allowed within a certain time frame", http.StatusTooManyRequests)
+				log.Printf("Request blocked for %s. Limit exceeded.", key)
 				return
 			}
 

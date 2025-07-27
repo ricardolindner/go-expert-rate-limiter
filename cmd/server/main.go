@@ -22,7 +22,7 @@ func main() {
 
 	mux.Handle("/", middleware.RateLimiterMiddleware(rateLimiter, cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Olá! Requisição processada com sucesso."))
+		w.Write([]byte("Success! Request ok."))
 	})))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +38,6 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Servidor escutando na porta %s...", server.Addr)
+	log.Printf("Server listening on port %s...", server.Addr)
 	log.Fatal(server.ListenAndServe())
 }

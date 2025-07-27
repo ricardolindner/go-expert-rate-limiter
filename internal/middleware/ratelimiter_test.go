@@ -23,7 +23,10 @@ import (
 
 var redisClient *redis.Client
 var ctx context.Context
-var redisContainer tc.Container
+
+const exposedPorts = "6379/tcp"
+const requestXStatusMessage = "Request %d: Expected OK status (%d), got %d"
+const expectingToManyRequestsMessage = "Request %d: Expected status Too Many Requests (%d), got %d"
 
 func TestMain(m *testing.M) {
 	ctx = context.Background()
@@ -31,30 +34,30 @@ func TestMain(m *testing.M) {
 	req := tc.GenericContainerRequest{
 		ContainerRequest: tc.ContainerRequest{
 			Image:        "redis:6.2-alpine",
-			ExposedPorts: []string{"6379/tcp"},
-			WaitingFor:   wait.ForLog("Ready to accept connections"),
+			ExposedPorts: []string{exposedPorts},
+			WaitingFor:   wait.ForListeningPort(exposedPorts),
 		},
+		Started: true,
 	}
-	var err error
-	redisContainer, err = tc.GenericContainer(ctx, req)
+	redisContainer, err := tc.GenericContainer(ctx, req)
 	if err != nil {
-		fmt.Printf("Erro ao iniciar o contêiner Redis: %v\n", err)
+		fmt.Printf("Error starting Redis container: %v\n", err)
 		os.Exit(1)
 	}
 
 	ip, err := redisContainer.Host(ctx)
 	if err != nil {
-		fmt.Printf("Erro ao obter IP do contêiner Redis: %v\n", err)
+		fmt.Printf("Error getting IP from Redis container: %v\n", err)
 		os.Exit(1)
 	}
-	port, err := redisContainer.MappedPort(ctx, "6379")
+	port, err := redisContainer.MappedPort(ctx, exposedPorts)
 	if err != nil {
-		fmt.Printf("Erro ao obter porta do contêiner Redis: %v\n", err)
+		fmt.Printf("Error getting port from Redis container: %v\n", err)
 		os.Exit(1)
 	}
 
 	redisAddr := fmt.Sprintf("%s:%s", ip, port.Port())
-	fmt.Printf("Redis rodando em: %s\n", redisAddr)
+	fmt.Printf("Redis running on: %s\n", redisAddr)
 
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: redisAddr,
@@ -63,7 +66,7 @@ func TestMain(m *testing.M) {
 
 	err = redisClient.Ping(ctx).Err()
 	if err != nil {
-		fmt.Printf("Erro ao conectar ao Redis de teste: %v\n", err)
+		fmt.Printf("Error connecting to test Redis: %v\n", err)
 		redisContainer.Terminate(ctx)
 		os.Exit(1)
 	}
@@ -71,7 +74,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	if err := redisContainer.Terminate(ctx); err != nil {
-		fmt.Printf("Erro ao terminar o contêiner Redis: %v\n", err)
+		fmt.Printf("Error terminating Redis container: %v\n", err)
 	}
 
 	os.Exit(code)
@@ -114,12 +117,12 @@ func TestRateLimiterMiddlewareIPBased(t *testing.T) {
 
 		if i <= defaultMaxRequests {
 			if rr.Code != http.StatusOK {
-				t.Errorf("Requisição %d: Esperado status OK (%d), obteve %d", i, http.StatusOK, rr.Code)
+				t.Errorf(requestXStatusMessage, i, http.StatusOK, rr.Code)
 			}
 		} else {
 			expectedBlockedRequests++
 			if rr.Code != http.StatusTooManyRequests {
-				t.Errorf("Requisição %d: Esperado status Too Many Requests (%d), obteve %d", i, http.StatusTooManyRequests, rr.Code)
+				t.Errorf(expectingToManyRequestsMessage, i, http.StatusTooManyRequests, rr.Code)
 			}
 			body, _ := io.ReadAll(rr.Body)
 			if string(body) != "you have reached the maximum number of requests or actions allowed within a certain time frame\n" {
@@ -133,10 +136,10 @@ func TestRateLimiterMiddlewareIPBased(t *testing.T) {
 	}
 
 	if expectedBlockedRequests != 2 {
-		t.Errorf("Esperado 2 requisições bloqueadas, obteve %d", expectedBlockedRequests)
+		t.Errorf("Expected 2 blocked requests, got %d", expectedBlockedRequests)
 	}
 
-	t.Logf("Esperando %v para o IP %s...", defaultBlockTime, ipAddr)
+	t.Logf("Expecting %v for IP %s...", defaultBlockTime, ipAddr)
 	time.Sleep(defaultBlockTime + 100*time.Millisecond)
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -145,7 +148,7 @@ func TestRateLimiterMiddlewareIPBased(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("Após tempo de bloqueio, esperado status OK, obteve %d", rr.Code)
+		t.Errorf("After blocking time, expected OK status, obtained %d", rr.Code)
 	}
 }
 
@@ -173,21 +176,21 @@ func TestRateLimiterMiddlewareTokenBased(t *testing.T) {
 
 		if i <= tokenMaxRequests {
 			if rr.Code != http.StatusOK {
-				t.Errorf("Requisição %d: Esperado status OK (%d), obteve %d", i, http.StatusOK, rr.Code)
+				t.Errorf(requestXStatusMessage, i, http.StatusOK, rr.Code)
 			}
 		} else {
 			expectedBlockedRequests++
 			if rr.Code != http.StatusTooManyRequests {
-				t.Errorf("Requisição %d: Esperado status Too Many Requests (%d), obteve %d", i, http.StatusTooManyRequests, rr.Code)
+				t.Errorf(expectingToManyRequestsMessage, i, http.StatusTooManyRequests, rr.Code)
 			}
 		}
 	}
 
 	if expectedBlockedRequests != 2 {
-		t.Errorf("Esperado 2 requisições bloqueadas por token, obteve %d", expectedBlockedRequests)
+		t.Errorf("Expected 2 requests blocked by token, got %d", expectedBlockedRequests)
 	}
 
-	t.Logf("Esperando %v para o token %s...", tokenBlockTime, testToken)
+	t.Logf("Expecting %v for token %s...", tokenBlockTime, testToken)
 	time.Sleep(tokenBlockTime + 100*time.Millisecond)
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -196,7 +199,7 @@ func TestRateLimiterMiddlewareTokenBased(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("Após tempo de bloqueio do token, esperado status OK, obteve %d", rr.Code)
+		t.Errorf("After token blocking time, expected OK status, obtained %d", rr.Code)
 	}
 }
 
@@ -227,18 +230,18 @@ func TestRateLimiterMiddlewareTokenPriority(t *testing.T) {
 
 		if i <= tokenMaxRequests {
 			if rr.Code != http.StatusOK {
-				t.Errorf("Requisição %d: Esperado status OK (%d), obteve %d", i, http.StatusOK, rr.Code)
+				t.Errorf(requestXStatusMessage, i, http.StatusOK, rr.Code)
 			}
 		} else {
 			expectedBlockedRequests++
 			if rr.Code != http.StatusTooManyRequests {
-				t.Errorf("Requisição %d: Esperado status Too Many Requests (%d), obteve %d", i, http.StatusTooManyRequests, rr.Code)
+				t.Errorf(expectingToManyRequestsMessage, i, http.StatusTooManyRequests, rr.Code)
 			}
 		}
 	}
 
 	if expectedBlockedRequests != 2 {
-		t.Errorf("Esperado 2 requisições bloqueadas por token (prioridade), obteve %d", expectedBlockedRequests)
+		t.Errorf("Expected 2 requests blocked by token (priority), got %d", expectedBlockedRequests)
 	}
 }
 
@@ -267,18 +270,18 @@ func TestRateLimiterMiddlewareUnknownTokenFallbackIP(t *testing.T) {
 
 		if i <= defaultMaxRequests {
 			if rr.Code != http.StatusOK {
-				t.Errorf("Requisição %d: Esperado status OK (%d), obteve %d", i, http.StatusOK, rr.Code)
+				t.Errorf(requestXStatusMessage, i, http.StatusOK, rr.Code)
 			}
 		} else {
 			expectedBlockedRequests++
 			if rr.Code != http.StatusTooManyRequests {
-				t.Errorf("Requisição %d: Esperado status Too Many Requests (%d), obteve %d", i, http.StatusTooManyRequests, rr.Code)
+				t.Errorf(expectingToManyRequestsMessage, i, http.StatusTooManyRequests, rr.Code)
 			}
 		}
 	}
 
 	if expectedBlockedRequests != 2 {
-		t.Errorf("Esperado 2 requisições bloqueadas pelo limite de IP (fallback), obteve %d", expectedBlockedRequests)
+		t.Errorf("Expected 2 requests blocked by IP limit (fallback), got %d", expectedBlockedRequests)
 	}
 }
 
@@ -322,14 +325,14 @@ func TestRateLimiterMiddlewareConcurrentRequests(t *testing.T) {
 		} else if status == http.StatusTooManyRequests {
 			blockedCount++
 		} else {
-			t.Errorf("Status inesperado: %d", status)
+			t.Errorf("Unexpected status: %d", status)
 		}
 	}
 
 	if allowedCount != defaultMaxRequests {
-		t.Errorf("Esperado %d requisições permitidas, obteve %d", defaultMaxRequests, allowedCount)
+		t.Errorf("Expected %d requests allowed, got %d", defaultMaxRequests, allowedCount)
 	}
 	if blockedCount != numConcurrentRequests-defaultMaxRequests {
-		t.Errorf("Esperado %d requisições bloqueadas, obteve %d", numConcurrentRequests-defaultMaxRequests, blockedCount)
+		t.Errorf("Expected %d blocked requests, got %d", numConcurrentRequests-defaultMaxRequests, blockedCount)
 	}
 }

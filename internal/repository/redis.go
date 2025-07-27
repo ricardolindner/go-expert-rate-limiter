@@ -24,9 +24,9 @@ func NewRedisStorage(addr, password string, db int) *RedisStorage {
 
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		panic(fmt.Sprintf("Não foi possível conectar ao Redis: %v", err))
+		panic(fmt.Sprintf("Unable to connect to Redis: %v", err))
 	}
-	fmt.Println("Conectado ao Redis com sucesso!")
+	fmt.Println("Connected to Redis successfully!")
 
 	return &RedisStorage{
 		client: client,
@@ -35,14 +35,20 @@ func NewRedisStorage(addr, password string, db int) *RedisStorage {
 }
 
 func (r *RedisStorage) Increment(key string, expiry time.Duration) (int, error) {
-	pipe := r.client.Pipeline()
-	val := pipe.Incr(r.ctx, key)
-	pipe.Expire(r.ctx, key, expiry)
-	_, err := pipe.Exec(r.ctx)
+	val, err := r.client.Incr(r.ctx, key).Result()
 	if err != nil {
-		return 0, fmt.Errorf("erro ao incrementar no Redis: %w", err)
+		return 0, fmt.Errorf("error when incrementing in Redis: %w", err)
 	}
-	return int(val.Val()), nil
+
+	if val == 1 {
+		// Só define o tempo de expiração se a chave foi criada agora
+		err := r.client.Expire(r.ctx, key, expiry).Err()
+		if err != nil {
+			return 0, fmt.Errorf("error setting expiration in Redis: %w", err)
+		}
+	}
+
+	return int(val), nil
 }
 
 func (r *RedisStorage) Get(key string) (int, error) {
@@ -50,11 +56,11 @@ func (r *RedisStorage) Get(key string) (int, error) {
 	if err == redis.Nil {
 		return 0, nil // Chave não encontrada
 	} else if err != nil {
-		return 0, fmt.Errorf("erro ao obter do Redis: %w", err)
+		return 0, fmt.Errorf("error getting from Redis: %w", err)
 	}
 	intValue, err := strconv.Atoi(val)
 	if err != nil {
-		return 0, fmt.Errorf("erro ao converter valor do Redis para int: %w", err)
+		return 0, fmt.Errorf("error converting Redis value to int: %w", err)
 	}
 	return intValue, nil
 }

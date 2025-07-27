@@ -28,7 +28,7 @@ func (m *MockStorage) Increment(key string, expiry time.Duration) (int, error) {
 	defer m.mu.Unlock()
 
 	if m.simulateError {
-		return 0, errors.New("erro simulado ao incrementar")
+		return 0, errors.New("simulated increment error")
 	}
 
 	if m.expiryTime[key].Before(time.Now()) {
@@ -45,7 +45,7 @@ func (m *MockStorage) Get(key string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.simulateError {
-		return 0, errors.New("erro simulado ao obter")
+		return 0, errors.New("simulated get error")
 	}
 
 	if m.expiryTime[key].Before(time.Now()) {
@@ -58,7 +58,7 @@ func (m *MockStorage) Set(key string, value int, expiry time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.simulateError {
-		return errors.New("erro simulado ao definir")
+		return errors.New("simulated set error")
 	}
 	m.data[key] = value
 	m.expiryTime[key] = time.Now().Add(expiry)
@@ -76,7 +76,7 @@ func TestLimiterAllow(t *testing.T) {
 		expectedError   bool
 	}{
 		{
-			name:            "Deve permitir todas as requisições dentro do limite",
+			name:            "Must allow all requests within the limit",
 			key:             "ip:1.1.1.1",
 			maxRequests:     5,
 			blockTime:       1 * time.Minute,
@@ -85,7 +85,7 @@ func TestLimiterAllow(t *testing.T) {
 			expectedError:   false,
 		},
 		{
-			name:            "Deve bloquear requisições que excedem o limite",
+			name:            "Should block requests that exceed the limit",
 			key:             "ip:2.2.2.2",
 			maxRequests:     3,
 			blockTime:       1 * time.Minute,
@@ -94,7 +94,7 @@ func TestLimiterAllow(t *testing.T) {
 			expectedError:   false,
 		},
 		{
-			name:            "Deve permitir todas as requisições de token dentro do limite",
+			name:            "Must allow all token requests within the limit",
 			key:             "token:ABC",
 			maxRequests:     10,
 			blockTime:       2 * time.Minute,
@@ -103,7 +103,7 @@ func TestLimiterAllow(t *testing.T) {
 			expectedError:   false,
 		},
 		{
-			name:            "Deve bloquear requisições de token que excedem o limite",
+			name:            "Should block token requests that exceed the limit",
 			key:             "token:XYZ",
 			maxRequests:     2,
 			blockTime:       3 * time.Minute,
@@ -120,9 +120,10 @@ func TestLimiterAllow(t *testing.T) {
 
 			allowedCount := 0
 			for i := 0; i < tt.numAttempts; i++ {
+				// CORREÇÃO AQUI: Capture o terceiro valor ou descarte-o
 				allowed, _, err := l.Allow(tt.key, tt.maxRequests, tt.blockTime)
 				if (err != nil) != tt.expectedError {
-					t.Fatalf("Erro inesperado: %v, esperado erro: %t", err, tt.expectedError)
+					t.Fatalf("Unespected error:: %v, expecting: %t", err, tt.expectedError)
 				}
 				if allowed {
 					allowedCount++
@@ -130,12 +131,13 @@ func TestLimiterAllow(t *testing.T) {
 			}
 
 			if allowedCount != tt.expectedAllowed {
-				t.Errorf("Esperado %d requisições permitidas, obteve %d", tt.expectedAllowed, allowedCount)
+				t.Errorf("Expected %d requests allowed, got %d", tt.expectedAllowed, allowedCount)
 			}
 
+			// CORREÇÃO AQUI: finalCount no storage deve ser o total de tentativas
 			finalCount, _ := mockStorage.Get(tt.key)
-			if finalCount != tt.expectedAllowed {
-				t.Errorf("Esperado %d requisições no storage, obteve %d", tt.expectedAllowed, finalCount)
+			if finalCount != tt.numAttempts { // Mude para tt.numAttempts
+				t.Errorf("Expected %d requests in storage, got %d", tt.numAttempts, finalCount)
 			}
 		})
 	}
@@ -148,10 +150,10 @@ func TestLimiterAllowErrorFromStorage(t *testing.T) {
 
 	allowed, _, err := l.Allow("key", 1, 1*time.Minute)
 	if err == nil {
-		t.Errorf("Esperado um erro, mas não houve erro")
+		t.Errorf("Expected an error, but there was no error")
 	}
 	if allowed {
-		t.Errorf("Não esperado que a requisição fosse permitida quando há erro no storage")
+		t.Errorf("Not expected that the request would be allowed when there is an error in the storage")
 	}
 }
 
@@ -161,9 +163,9 @@ func TestLimiterConcurrentRequests(t *testing.T) {
 
 	key := "concurrent_test_key"
 	maxRequests := 10
-	blockTime := 1 * time.Second
+	blockTime := 1 * time.Second // Tempo de bloqueio curto para o teste
 
-	numGoroutines := 100
+	numGoroutines := 100 // Tentar muitas requisições simultaneamente
 	allowedCountChan := make(chan bool, numGoroutines)
 	var wg sync.WaitGroup
 
@@ -171,9 +173,10 @@ func TestLimiterConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Captura os 3 valores, descartando o do meio com _
 			allowed, _, err := l.Allow(key, maxRequests, blockTime)
 			if err != nil {
-				t.Errorf("Erro inesperado em goroutine: %v", err)
+				t.Errorf("Unexpected error in goroutine: %v", err)
 				return
 			}
 			allowedCountChan <- allowed
@@ -191,11 +194,11 @@ func TestLimiterConcurrentRequests(t *testing.T) {
 	}
 
 	if countAllowed != maxRequests {
-		t.Errorf("Esperado %d requisições permitidas em concorrência, obteve %d", maxRequests, countAllowed)
+		t.Errorf("Expected %d requests allowed in concurrency, got %d", maxRequests, countAllowed)
 	}
 
 	finalCount, _ := mockStorage.Get(key)
-	if finalCount != maxRequests {
-		t.Errorf("Esperado %d requisições permitidas no storage, obteve %d", maxRequests, finalCount)
+	if finalCount != numGoroutines {
+		t.Errorf("Expected %d requests in storage (total attempts), got %d", numGoroutines, finalCount)
 	}
 }
