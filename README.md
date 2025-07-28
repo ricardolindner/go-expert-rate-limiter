@@ -23,7 +23,7 @@ A simple and extensible HTTP rate limiter written in Go, using Redis as the back
 ```text
 go-expert-rate-limiter/
 |-- cmd/
-|   |-- server/                 # Main entrypoint for the HTTP server
+|   |-- server/                 # Main entry point for the HTTP server
 |       |-- [main.go]
 |-- configs/                    # Loads environment variables (.env)
 |   |-- [config.go]
@@ -59,7 +59,7 @@ git clone https://github.com/ricardolindner/go-expert-rate-limiter.git
 cd go-expert-rate-limiter
 ```
 
-Download the dempendencies:
+Download the dependencies:
 ```bash
 go mod tidy
 ```
@@ -102,13 +102,13 @@ TOKEN_ANOTHER_TOKEN_BLOCK_MINUTES=1
 
 ## Running the Project
 ### 1. Start Redis
-In the project root path start the Redis:
+In the project root directory, start Redis:
 ```bash
 docker-compose up -d
 ```
 
 ### 2. Build and Run the Server
-In the project root path start the server:
+In the project root directory, start the server:
 ```bash
 go run ./cmd/server/main.go
 ```
@@ -123,14 +123,14 @@ It's possible to run via `CURL` or using Postman or Insomnia:
 for i in $(seq 1 30); do curl -v http://localhost:8080/; done
 ```
 
-### 1. Testing by TOKEN
+### 2. Testing by TOKEN
 To test the token limit you must add the `API_KEY` header:
 ```bash
 for i in $(seq 1 30); do curl -v -H "API_KEY: ANOTHER_TOKEN" http://localhost:8080/; done
 ```
 
 ## Unit and Integration tests
-The integration tests use `testcontainers`, so the docker running is a must have.
+The integration tests use `testcontainers`, so Docker must be running.
 In the project root run the tests:
 ```bash
 go test ./...
